@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eye Blink Detection with MediaPipe</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            background-color: #2F4F4F;
+            color: #D3D3D3;
+            height: 100vh;
+        }
+        video, canvas {
+            border: 2px solid #D3D3D3;
+        }
+        canvas {
+            position: absolute;
+            z-index: 1;
+        }
+        video {
+            position: absolute;
+        }
+    </style>
+</head>
+<body>
+
+<video id="video" width="640" height="480" autoplay></video>
+<canvas id="canvas" width="640" height="480"></canvas>
+
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    let blinkCount = 0;
+    let blinked = false;
+    const blinkThreshold = 0.26; // Similar to your Python threshold
+    const maxHistory = 10;
+    let leftEyeHistory = [];
+    let rightEyeHistory = [];
+
+    // Eye landmarks
+    const leftEyeLandmarks = [362, 385, 387, 263, 373, 380];
+    const rightEyeLandmarks = [33, 160, 158, 133, 153, 144];
+
+    // FaceMesh initialization
+    const faceMesh = new FaceMesh({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+    });
+
+    faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+    });
+
+    faceMesh.onResults(onResults);
+
+    async function initCamera() {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        video.play();
+
+        video.addEventListener('loadeddata', () => {
+            detectFaces();
+        });
+    }
+
+    function onResults(results) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (results.multiFaceLandmarks) {
+            for (const landmarks of results.multiFaceLandmarks) {
+                // Draw face mesh
+                drawConnectors(ctx, landmarks, FaceMesh.FACEMESH_TESSELATION, { color: '#00FF00', lineWidth: 1 });
+
+                // Detect eye blinking
+                const leftEAR = calculateEAR(landmarks, leftEyeLandmarks);
+                const rightEAR = calculateEAR(landmarks, rightEyeLandmarks);
+
+                // Print EAR values in the console
+                console.log("Left EAR:", leftEAR);
+                console.log("Right EAR:", rightEAR);
+
+                // Keep a running average of EAR values
+                updateHistory(leftEyeHistory, leftEAR);
+                updateHistory(rightEyeHistory, rightEAR);
+
+                const leftAvgEAR = calculateAverage(leftEyeHistory);
+                const rightAvgEAR = calculateAverage(rightEyeHistory);
+
+                // Check if eyes are blinking
+                const isBlinking = (leftAvgEAR < blinkThreshold) || (rightAvgEAR < blinkThreshold);
+
+                if (isBlinking && !blinked) {
+                    blinkCount++;
+                    blinked = true;
+                    console.log("Blink detected!");
+                } else if (!isBlinking) {
+                    blinked = false;
+                }
+
+                // Draw blink count
+                ctx.font = '20px Arial';
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillText(`Blink Count: ${blinkCount}`, 30, 90);
+            }
+        }
+    }
+
+    function calculateEAR(landmarks, eyeIndices) {
+        const vertical1 = distance(landmarks[eyeIndices[1]], landmarks[eyeIndices[5]]);
+        const vertical2 = distance(landmarks[eyeIndices[2]], landmarks[eyeIndices[4]]);
+        const horizontal = distance(landmarks[eyeIndices[0]], landmarks[eyeIndices[3]]);
+        return (vertical1 + vertical2) / (2.0 * horizontal);
+    }
+
+    function distance(point1, point2) {
+        const xDiff = point1.x - point2.x;
+        const yDiff = point1.y - point2.y;
+        return Math.sqrt(xDiff * xDiff + yDiff * yDiff);
+    }
+
+    function updateHistory(history, newValue) {
+        history.push(newValue);
+        if (history.length > maxHistory) {
+            history.shift();
+        }
+    }
+
+    function calculateAverage(history) {
+        const sum = history.reduce((a, b) => a + b, 0);
+        return sum / history.length;
+    }
+
+    async function detectFaces() {
+        while (true) {
+            await faceMesh.send({ image: video });
+            await new Promise(requestAnimationFrame);
+        }
+    }
+
+    initCamera();
+</script>
+
+</body>
+</html>
