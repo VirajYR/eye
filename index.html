@@ -40,11 +40,18 @@
 
     let blinkCount = 0;
     let blinked = false;
-    const blinkThreshold = 0.26; // Similar to your Python threshold
+    const blinkThreshold = 0.3; // Adjusted for faster blink detection
     const maxHistory = 10;
     let leftEyeHistory = [];
     let rightEyeHistory = [];
-
+    
+    // Randomly choose between 2 and 5 blinks
+    const requiredBlinks = Math.floor(Math.random() * 4) + 2;
+    console.log(`Please blink ${requiredBlinks} times.`);
+    
+    let startTime = null;
+    const timeLimit = 20000; // 1 minute time limit
+    
     // Eye landmarks
     const leftEyeLandmarks = [362, 385, 387, 263, 373, 380];
     const rightEyeLandmarks = [33, 160, 158, 133, 153, 144];
@@ -85,10 +92,6 @@
                 const leftEAR = calculateEAR(landmarks, leftEyeLandmarks);
                 const rightEAR = calculateEAR(landmarks, rightEyeLandmarks);
 
-                // Print EAR values in the console
-                console.log("Left EAR:", leftEAR);
-                console.log("Right EAR:", rightEAR);
-
                 // Keep a running average of EAR values
                 updateHistory(leftEyeHistory, leftEAR);
                 updateHistory(rightEyeHistory, rightEAR);
@@ -99,18 +102,33 @@
                 // Check if eyes are blinking
                 const isBlinking = (leftAvgEAR < blinkThreshold) || (rightAvgEAR < blinkThreshold);
 
+                if (!startTime) {
+                    startTime = Date.now();
+                }
+
+                const elapsedTime = Date.now() - startTime;
+
                 if (isBlinking && !blinked) {
                     blinkCount++;
                     blinked = true;
-                    console.log("Blink detected!");
+                    console.log(`Blink detected! Total: ${blinkCount}`);
                 } else if (!isBlinking) {
                     blinked = false;
                 }
 
-                // Draw blink count
+                // Show blink count on the screen
                 ctx.font = '20px Arial';
                 ctx.fillStyle = '#FFFFFF';
                 ctx.fillText(`Blink Count: ${blinkCount}`, 30, 90);
+                ctx.fillText(`Target: ${requiredBlinks} blinks`, 30, 120);
+                ctx.fillText(`Time left: ${Math.max(0, (timeLimit - elapsedTime) / 1000).toFixed(0)} sec`, 30, 150);
+
+                // Check if blinks are completed within time
+                if (blinkCount >= requiredBlinks && elapsedTime <= timeLimit) {
+                    ctx.fillText('Liveliness detected!', 30, 180);
+                } else if (elapsedTime > timeLimit) {
+                    ctx.fillText('Failed: Time expired', 30, 180);
+                }
             }
         }
     }
